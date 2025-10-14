@@ -66,6 +66,21 @@
       </div>
     </div>
 
+    <!-- 状态提示 -->
+    <div class="status-bar" v-if="!isServerConnected">
+      <div class="status-warning">
+        ⚠️ 数据库未连接，当前使用本地数据
+      </div>
+    </div>
+    
+    <!-- 加载状态 -->
+    <div class="loading-overlay" v-if="isLoading">
+      <div class="loading-content">
+        <div class="spinner"></div>
+        <p>正在加载诗词...</p>
+      </div>
+    </div>
+
     <!-- 主内容区域：根据底部标签切换 -->
     <div class="content-list">
       <!-- 首页：热门诗词列表（支持搜索/分类/收藏） -->
@@ -81,14 +96,24 @@
           <div class="poem-info">
             <div class="poem-title">
               {{ poem.title }}
-              <button
-                class="fav-btn"
-                :aria-pressed="isFav(poem)"
-                @click.stop="toggleFav(poem)"
-                :title="isFav(poem) ? '取消收藏' : '收藏'"
-              >
-                {{ isFav(poem) ? '💛' : '🤍' }}
-              </button>
+              <div class="poem-actions">
+                <button
+                  class="fav-btn"
+                  :aria-pressed="isFav(poem)"
+                  @click.stop="toggleFav(poem)"
+                  :title="isFav(poem) ? '取消收藏' : '收藏'"
+                >
+                  {{ isFav(poem) ? '💛' : '🤍' }}
+                </button>
+                <button
+                  class="delete-btn"
+                  @click.stop="deletePoem(poem)"
+                  :title="'删除诗词'"
+                  v-if="isServerConnected"
+                >
+                  🗑️
+                </button>
+              </div>
             </div>
             <div class="poem-author">{{ poem.author }} · {{ poem.dynasty }}</div>
             <div class="poem-preview">{{ poem.preview }}</div>
@@ -103,10 +128,10 @@
           <h3>分类一览</h3>
           <ul>
             <li v-for="(c, i) in categories" :key="i">
-              <button class="link" @click="selectCategory(i)">{{ c }}</button>
+              <button class="link" @click="selectCategory(i)">{{ c }}（{{ categoryCounts[c] }}）</button>
             </li>
           </ul>
-          <p class="hint">点击分类，将在“首页”按分类筛选。</p>
+          <p class="hint">点击分类，将在“首页”按分类筛选；右上角可搜索标题/作者/朝代/内容。</p>
         </div>
       </template>
 
@@ -122,7 +147,17 @@
           <div class="poem-info">
             <div class="poem-title">
               {{ poem.title }}
-              <button class="fav-btn" @click.stop="toggleFav(poem)">💛</button>
+              <div class="poem-actions">
+                <button class="fav-btn" @click.stop="toggleFav(poem)">💛</button>
+                <button
+                  class="delete-btn"
+                  @click.stop="deletePoem(poem)"
+                  :title="'删除诗词'"
+                  v-if="isServerConnected"
+                >
+                  🗑️
+                </button>
+              </div>
             </div>
             <div class="poem-author">{{ poem.author }} · {{ poem.dynasty }}</div>
             <div class="poem-preview">{{ poem.preview }}</div>
@@ -131,11 +166,16 @@
         <div v-if="favList.length === 0" class="empty">还没有收藏的诗词</div>
       </template>
 
-      <!-- 我的页：占位信息 -->
+      <!-- 我的页：统计信息 -->
       <template v-else>
         <div class="profile-panel">
           <h3>我的</h3>
-          <p>这里可展示用户信息、阅读历史、设置等。</p>
+          <p>诗词总数：{{ totalCount }}</p>
+          <p>收藏数量：{{ favoritesCount }}</p>
+          <h4 style="margin-top:10px">分类统计</h4>
+          <ul>
+            <li v-for="(c, i) in categories" :key="i">{{ c }}：{{ categoryCounts[c] }}</li>
+          </ul>
         </div>
       </template>
     </div>
@@ -214,6 +254,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { analyzePoem, type AnalysisResult, type SearchPoemItem } from '../../api/poem'
+import { PoemAPI, type Poem as DatabasePoem } from '../../api/poemDatabase'
 import OnlineSearch from '../../components/OnlineSearch.vue'
 
 /* 轮播数据 */
@@ -239,146 +280,163 @@ const carouselItems = ref([
 const categories = ref(['唐诗', '宋词', '元曲', '古风', '现代诗', '乐府', '绝句', '律诗'])
 const activeCategory = ref(0)
 
-type Poem = {
-  id?: string
-  title: string
-  author: string
-  dynasty: string
-  preview: string
-  image: string
-}
+type Poem = DatabasePoem
 
-// 从 localStorage 加载诗词列表
-const loadPoemsFromStorage = (): Poem[] => {
+// 数据库连接状态
+const isServerConnected = ref(false)
+const isLoading = ref(true)
+const errorMessage = ref<string | null>(null)
+
+// 诗词列表
+const poems = ref<Poem[]>([])
+
+// 从数据库加载诗词列表
+const loadPoemsFromDatabase = async (): Promise<void> => {
   try {
-    const stored = localStorage.getItem('poems')
-    if (stored) {
-      return JSON.parse(stored)
-    }
-  } catch (e) {
-    console.warn('Failed to load poems from localStorage:', e)
-  }
-  // 默认诗词
-  return [
-    {
-      id: 'default_1',
-      title: '静夜思',
-      author: '李白',
-      dynasty: '唐代',
-      preview: '床前明月光，疑是地上霜。举头望明月，低头思故乡。',
-      image: 'https://ai-public.mastergo.com/ai/img_res/48599143c45e1b4cb1d0cd756388f738.jpg'
-    },
-    {
-      id: 'default_2',
-      title: '春晓',
-      author: '孟浩然',
-      dynasty: '唐代',
-      preview: '春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。',
-      image: 'https://ai-public.mastergo.com/ai/img_res/437f5006c8faaf74d6d7d4197e1d9482.jpg'
-    },
-    {
-      id: 'default_3',
-      title: '水调歌头',
-      author: '苏轼',
-      dynasty: '宋代',
-      preview: '明月几时有？把酒问青天。不知天上宫阙，今夕是何年。',
-      image: 'https://ai-public.mastergo.com/ai/img_res/156f26c1f21f943949d6e24ce6c4e10c.jpg'
-    },
-    {
-      id: 'default_4',
-      title: '登鹳雀楼',
-      author: '王之涣',
-      dynasty: '唐代',
-      preview: '白日依山尽，黄河入海流。欲穷千里目，更上一层楼。',
-      image: 'https://ai-public.mastergo.com/ai/img_res/43e7125fe4023d89a1774e4416e1ace4.jpg'
-    },
-    {
-      id: 'default_5',
-      title: '江雪',
-      author: '柳宗元',
-      dynasty: '唐代',
-      preview: '千山鸟飞绝，万径人踪灭。孤舟蓑笠翁，独钓寒江雪。',
-      image: 'https://ai-public.mastergo.com/ai/img_res/f0be731204399b0b196cea3d7505fdd2.jpg'
-    }
-  ]
-}
-
-// 保存诗词列表到 localStorage
-const savePoemsToStorage = (poemList: Poem[]) => {
-  try {
-    localStorage.setItem('poems', JSON.stringify(poemList))
-  } catch (e) {
-    console.warn('Failed to save poems to localStorage:', e)
-  }
-}
-
-const poems = ref<Poem[]>(loadPoemsFromStorage())
-
-/* 在线搜索状态 */
-const showOnlineSearch = ref(false)
-
-/* 在线搜索方法 */
-const handleAddPoems = (newPoems: SearchPoemItem[]) => {
-  const existingTitles = new Set(poems.value.map(p => `${p.title}-${p.author}`))
-  const uniquePoems = newPoems.filter(p => !existingTitles.has(`${p.title}-${p.author}`))
-  
-  if (uniquePoems.length > 0) {
-    const convertedPoems: Poem[] = uniquePoems.map(p => ({
-      id: p.id,
-      title: p.title,
-      author: p.author,
-      dynasty: p.dynasty,
-      preview: p.content || p.preview,  // 优先使用完整的content，如果没有则使用preview
-      image: p.image || 'https://ai-public.mastergo.com/ai/img_res/48599143c45e1b4cb1d0cd756388f738.jpg'
-    }))
+    console.log('🔄 开始加载诗词数据...')
+    isLoading.value = true
+    errorMessage.value = null
     
-    poems.value = [...poems.value, ...convertedPoems]
-    savePoemsToStorage(poems.value)
+    // 检查服务器连接
+    console.log('🔍 检查服务器连接...')
+    const connected = await PoemAPI.checkConnection()
+    console.log('🔗 服务器连接状态:', connected)
+    isServerConnected.value = connected
     
-    alert(`成功添加 ${uniquePoems.length} 首诗词！`)
-    showOnlineSearch.value = false
-  } else {
-    alert('所选诗词已存在，未添加重复内容。')
+    if (!connected) {
+      console.warn('⚠️ 服务器连接失败，使用本地数据')
+      throw new Error('无法连接到服务器，请确保后端服务已启动')
+    }
+    
+    // 获取诗词列表
+    console.log('📚 从数据库获取诗词列表...')
+    const poemList = await PoemAPI.getAll()
+    console.log('✅ 获取到诗词数据:', poemList.length, '首')
+    console.log('📋 诗词列表:', poemList)
+    poems.value = poemList
+    
+    // 如果数据库为空，插入默认数据
+    if (poemList.length === 0) {
+      console.log('📝 数据库为空，初始化默认数据...')
+      await initializeDefaultPoems()
+    }
+    
+    console.log('🎉 诗词数据加载完成!')
+  } catch (error: any) {
+    console.error('❌ 加载诗词失败:', error)
+    errorMessage.value = error.message || '加载诗词失败'
+    
+    // 如果数据库连接失败，使用本地默认数据
+    console.log('🔄 使用本地默认数据')
+    poems.value = getDefaultPoems()
+  } finally {
+    isLoading.value = false
   }
 }
 
-const poems_old = ref<Poem[]>([
+// 获取默认诗词数据
+const getDefaultPoems = (): Poem[] => [
   {
     title: '静夜思',
     author: '李白',
     dynasty: '唐代',
+    content: '床前明月光，疑是地上霜。举头望明月，低头思故乡。',
     preview: '床前明月光，疑是地上霜。举头望明月，低头思故乡。',
-    image: 'https://ai-public.mastergo.com/ai/img_res/48599143c45e1b4cb1d0cd756388f738.jpg'
+    image: 'https://ai-public.mastergo.com/ai/img_res/48599143c45e1b4cb1d0cd756388f738.jpg',
+    is_favorite: false
   },
   {
     title: '春晓',
     author: '孟浩然',
     dynasty: '唐代',
+    content: '春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。',
     preview: '春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。',
-    image: 'https://ai-public.mastergo.com/ai/img_res/437f5006c8faaf74d6d7d4197e1d9482.jpg'
+    image: 'https://ai-public.mastergo.com/ai/img_res/437f5006c8faaf74d6d7d4197e1d9482.jpg',
+    is_favorite: false
   },
   {
     title: '水调歌头',
     author: '苏轼',
     dynasty: '宋代',
+    content: '明月几时有？把酒问青天。不知天上宫阙，今夕是何年。',
     preview: '明月几时有？把酒问青天。不知天上宫阙，今夕是何年。',
-    image: 'https://ai-public.mastergo.com/ai/img_res/156f26c1f21f943949d6e24ce6c4e10c.jpg'
+    image: 'https://ai-public.mastergo.com/ai/img_res/156f26c1f21f943949d6e24ce6c4e10c.jpg',
+    is_favorite: false
   },
   {
     title: '登鹳雀楼',
     author: '王之涣',
     dynasty: '唐代',
+    content: '白日依山尽，黄河入海流。欲穷千里目，更上一层楼。',
     preview: '白日依山尽，黄河入海流。欲穷千里目，更上一层楼。',
-    image: 'https://ai-public.mastergo.com/ai/img_res/43e7125fe4023d89a1774e4416e1ace4.jpg'
+    image: 'https://ai-public.mastergo.com/ai/img_res/43e7125fe4023d89a1774e4416e1ace4.jpg',
+    is_favorite: false
   },
   {
     title: '江雪',
     author: '柳宗元',
     dynasty: '唐代',
+    content: '千山鸟飞绝，万径人踪灭。孤舟蓑笠翁，独钓寒江雪。',
     preview: '千山鸟飞绝，万径人踪灭。孤舟蓑笠翁，独钓寒江雪。',
-    image: 'https://ai-public.mastergo.com/ai/img_res/f0be731204399b0b196cea3d7505fdd2.jpg'
+    image: 'https://ai-public.mastergo.com/ai/img_res/f0be731204399b0b196cea3d7505fdd2.jpg',
+    is_favorite: false
   }
-])
+]
+
+// 初始化默认诗词
+const initializeDefaultPoems = async (): Promise<void> => {
+  try {
+    const defaultPoems = getDefaultPoems()
+    const createdPoems = await PoemAPI.createBatch(defaultPoems)
+    poems.value = createdPoems
+    console.log('默认诗词初始化完成')
+  } catch (error: any) {
+    console.error('初始化默认诗词失败:', error)
+    throw error
+  }
+}
+
+/* 在线搜索状态 */
+const showOnlineSearch = ref(false)
+
+/* 在线搜索方法 */
+const handleAddPoems = async (newPoems: SearchPoemItem[]): Promise<void> => {
+  try {
+    const existingTitles = new Set(poems.value.map(p => `${p.title}-${p.author}`))
+    const uniquePoems = newPoems.filter(p => !existingTitles.has(`${p.title}-${p.author}`))
+    
+    if (uniquePoems.length > 0) {
+      const convertedPoems = uniquePoems.map(p => ({
+        title: p.title,
+        author: p.author,
+        dynasty: p.dynasty,
+        content: p.content || p.preview,
+        preview: p.preview || p.content,
+        image: p.image || 'https://ai-public.mastergo.com/ai/img_res/48599143c45e1b4cb1d0cd756388f738.jpg',
+        is_favorite: false
+      }))
+      
+      if (isServerConnected.value) {
+        // 保存到数据库
+        const createdPoems = await PoemAPI.createBatch(convertedPoems)
+        poems.value = [...poems.value, ...createdPoems]
+      } else {
+        // 如果服务器未连接，只添加到本地数组
+        poems.value = [...poems.value, ...convertedPoems]
+      }
+      
+      alert(`成功添加 ${uniquePoems.length} 首诗词！`)
+      showOnlineSearch.value = false
+    } else {
+      alert('所选诗词已存在，未添加重复内容。')
+    }
+  } catch (error: any) {
+    console.error('添加诗词失败:', error)
+    alert(`添加诗词失败: ${error.message}`)
+  }
+}
+
+
 
 /* 鉴赏状态与方法 */
 const appreciationLoading = ref(false)
@@ -399,7 +457,7 @@ const fetchAppreciation = async () => {
         title: selectedPoem.value.title,
         author: selectedPoem.value.author,
         dynasty: selectedPoem.value.dynasty,
-        content: selectedPoem.value.preview
+        content: selectedPoem.value.content || selectedPoem.value.preview || ''
       },
       appreciationAbort.signal
     )
@@ -417,9 +475,9 @@ const searchQuery = ref('')
 const toggleSearch = () => (showSearch.value = !showSearch.value)
 const clearSearch = () => (searchQuery.value = '')
 const dynastyMap: Record<string, string> = {
-  唐诗: '唐代',
-  宋词: '宋代',
-  元曲: '元代',
+  唐诗: '唐',
+  宋词: '宋',
+  元曲: '元',
   古风: '',
   现代诗: '',
   乐府: '',
@@ -433,21 +491,80 @@ const filteredPoems = computed(() => {
     const matchDynasty = targetDynasty ? p.dynasty.includes(targetDynasty) : true
     const matchQuery =
       !q ||
-      [p.title, p.author, p.dynasty, p.preview].some((t) => t.toLowerCase().includes(q.toLowerCase()))
+      [p.title, p.author, p.dynasty, p.preview || p.content].some((t) => t?.toLowerCase().includes(q.toLowerCase()))
     return matchDynasty && matchQuery
   })
 })
 
+// 统计信息
+const totalCount = computed(() => poems.value.length)
+const favoritesCount = computed(() => poems.value.filter((p) => Boolean(p.is_favorite)).length)
+const categoryCounts = computed<Record<string, number>>(() => {
+  const map: Record<string, number> = {}
+  categories.value.forEach((c) => {
+    const key = dynastyMap[c]
+    map[c] = key ? poems.value.filter((p) => p.dynasty.includes(key)).length : poems.value.length
+  })
+  return map
+})
+
 /* 收藏 */
-const favSet = ref<Set<string>>(new Set())
-const favKey = (p: Poem) => `${p.title}-${p.author}`
-const isFav = (p: Poem) => favSet.value.has(favKey(p))
-const toggleFav = (p: Poem) => {
-  const key = favKey(p)
-  if (favSet.value.has(key)) favSet.value.delete(key)
-  else favSet.value.add(key)
+const isFav = (p: Poem) => Boolean(p.is_favorite)
+const toggleFav = async (p: Poem): Promise<void> => {
+  try {
+    if (isServerConnected.value && p.id) {
+      // 通过API切换收藏状态
+      const updatedPoem = await PoemAPI.toggleFavorite(p.id)
+      
+      // 更新本地数据
+      const index = poems.value.findIndex(poem => poem.id === p.id)
+      if (index !== -1) {
+        poems.value[index] = {
+          ...poems.value[index],
+          ...updatedPoem,
+          is_favorite: Boolean(updatedPoem.is_favorite)
+        }
+      }
+    } else {
+      // 如果服务器未连接，只更新本地状态
+      const index = poems.value.findIndex(poem => poem.title === p.title && poem.author === p.author)
+      if (index !== -1) {
+        poems.value[index].is_favorite = !poems.value[index].is_favorite
+      }
+    }
+  } catch (error: any) {
+    console.error('切换收藏状态失败:', error)
+    alert(`操作失败: ${error.message}`)
+  }
 }
 const favList = computed(() => poems.value.filter((p) => isFav(p)))
+
+/* 删除诗词 */
+const deletePoem = async (poem: Poem): Promise<void> => {
+  if (!confirm(`确定要删除诗词《${poem.title}》吗？`)) {
+    return
+  }
+  
+  try {
+    if (isServerConnected.value && poem.id) {
+      // 通过API删除诗词
+      await PoemAPI.delete(poem.id)
+    }
+    
+    // 从本地数组中移除
+    const index = poems.value.findIndex(p => 
+      poem.id ? p.id === poem.id : (p.title === poem.title && p.author === poem.author)
+    )
+    if (index !== -1) {
+      poems.value.splice(index, 1)
+    }
+    
+    alert('诗词删除成功！')
+  } catch (error: any) {
+    console.error('删除诗词失败:', error)
+    alert(`删除失败: ${error.message}`)
+  }
+}
 
 /* 页面切换 */
 const footerItems = ref([
@@ -505,8 +622,9 @@ const resumeCarousel = () => {
   if (!timer) startAuto()
 }
 
-onMounted(() => {
+onMounted(async () => {
   startAuto()
+  await loadPoemsFromDatabase()
 })
 onBeforeUnmount(() => {
   pauseCarousel()
@@ -567,6 +685,65 @@ onBeforeUnmount(() => {
   background: #fafafa;
   border-radius: 6px;
   cursor: pointer;
+}
+.online-search-btn {
+  padding: 8px 12px;
+  border: 1px solid #c9a76f;
+  background: #c9a76f;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.online-search-btn:hover {
+  background: #b8956a;
+}
+
+/* 状态提示 */
+.status-bar {
+  padding: 8px 16px;
+  background: #fff3cd;
+  border-bottom: 1px solid #ffeaa7;
+}
+.status-warning {
+  font-size: 14px;
+  color: #856404;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 加载状态 */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.loading-content {
+  background: white;
+  padding: 24px;
+  border-radius: 8px;
+  text-align: center;
+}
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #c9a76f;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* 轮播 */
@@ -705,11 +882,25 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
 }
-.fav-btn {
+.poem-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.fav-btn, .delete-btn {
   background: transparent;
   border: none;
   cursor: pointer;
   font-size: 18px;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+.fav-btn:hover, .delete-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+.delete-btn {
+  color: #dc3545;
 }
 .poem-author {
   font-size: 14px;
