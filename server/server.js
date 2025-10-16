@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import bodyParser from 'body-parser';
 import { initDatabase } from './config/database.js';
 import poemRoutes from './routes/poemRoutes.js';
+import authRoutes from './routes/auth.js';
 
 // 加载环境变量
 dotenv.config();
@@ -13,7 +14,7 @@ const PORT = process.env.PORT || 3001;
 
 // 中间件配置
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174', 'http://127.0.0.1:5175'],
   credentials: true
 }));
 
@@ -28,6 +29,7 @@ app.use((req, res, next) => {
 
 // 路由配置
 app.use('/api/poems', poemRoutes);
+app.use('/api/auth', authRoutes);
 
 // 健康检查接口
 app.get('/health', (req, res) => {

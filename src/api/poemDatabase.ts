@@ -1,41 +1,8 @@
-import axios from 'axios'
+import http from './http'
 import type { AxiosResponse } from 'axios'
 
-// 配置基础URL
-const BASE_URL = 'http://localhost:3001/api'
-
-// 创建axios实例
-const api = axios.create({
-  baseURL: BASE_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json'
-  }
-})
-
-// 请求拦截器
-api.interceptors.request.use(
-  (config) => {
-    console.log(`API请求: ${config.method?.toUpperCase()} ${config.url}`)
-    return config
-  },
-  (error) => {
-    console.error('请求错误:', error)
-    return Promise.reject(error)
-  }
-)
-
-// 响应拦截器
-api.interceptors.response.use(
-  (response) => {
-    console.log(`API响应: ${response.status} ${response.config.url}`)
-    return response
-  },
-  (error) => {
-    console.error('响应错误:', error.response?.data || error.message)
-    return Promise.reject(error)
-  }
-)
+// 使用统一的HTTP实例
+const api = http
 
 // 诗词数据类型定义
 export interface Poem {
@@ -80,132 +47,132 @@ export class PoemAPI {
   // 获取所有诗词
   static async getAll(filters?: PoemFilters): Promise<Poem[]> {
     try {
-      const response: AxiosResponse<ApiResponse<Poem[]>> = await api.get('/poems', {
+      const response = await api.get('/poems', {
         params: filters
       })
       
-      if (response.data.success) {
-        return response.data.data
+      if (response.success) {
+        return response.data
       } else {
-        throw new Error(response.data.message || '获取诗词列表失败')
+        throw new Error(response.message || '获取诗词列表失败')
       }
     } catch (error: any) {
       console.error('获取诗词列表失败:', error)
-      throw new Error(error.response?.data?.message || error.message || '网络错误')
+      throw new Error(error.message || '网络错误')
     }
   }
 
   // 根据ID获取诗词
   static async getById(id: number): Promise<Poem> {
     try {
-      const response: AxiosResponse<ApiResponse<Poem>> = await api.get(`/poems/${id}`)
+      const response = await api.get(`/poems/${id}`)
       
-      if (response.data.success) {
-        return response.data.data
+      if (response.success) {
+        return response.data
       } else {
-        throw new Error(response.data.message || '获取诗词详情失败')
+        throw new Error(response.message || '获取诗词详情失败')
       }
     } catch (error: any) {
       console.error('获取诗词详情失败:', error)
-      throw new Error(error.response?.data?.message || error.message || '网络错误')
+      throw new Error(error.message || '网络错误')
     }
   }
 
   // 创建新诗词
   static async create(poem: Omit<Poem, 'id' | 'created_at' | 'updated_at'>): Promise<Poem> {
     try {
-      const response: AxiosResponse<ApiResponse<Poem>> = await api.post('/poems', poem)
+      const response = await api.post('/poems', poem)
       
-      if (response.data.success) {
-        return response.data.data
+      if (response.success) {
+        return response.data
       } else {
-        throw new Error(response.data.message || '创建诗词失败')
+        throw new Error(response.message || '创建诗词失败')
       }
     } catch (error: any) {
       console.error('创建诗词失败:', error)
-      throw new Error(error.response?.data?.message || error.message || '网络错误')
+      throw new Error(error.message || '网络错误')
     }
   }
 
   // 批量创建诗词
   static async createBatch(poems: Array<Omit<Poem, 'id' | 'created_at' | 'updated_at'>>): Promise<Poem[]> {
     try {
-      const response: AxiosResponse<ApiResponse<Poem[]>> = await api.post('/poems/batch', {
+      const response = await api.post('/poems/batch', {
         poems
       })
       
-      if (response.data.success) {
-        return response.data.data
+      if (response.success) {
+        return response.data
       } else {
-        throw new Error(response.data.message || '批量创建诗词失败')
+        throw new Error(response.message || '批量创建诗词失败')
       }
     } catch (error: any) {
       console.error('批量创建诗词失败:', error)
-      throw new Error(error.response?.data?.message || error.message || '网络错误')
+      throw new Error(error.message || '网络错误')
     }
   }
 
   // 更新诗词
   static async update(id: number, poem: Partial<Poem>): Promise<Poem> {
     try {
-      const response: AxiosResponse<ApiResponse<Poem>> = await api.put(`/poems/${id}`, poem)
+      const response = await api.put(`/poems/${id}`, poem)
       
-      if (response.data.success) {
-        return response.data.data
+      if (response.success) {
+        return response.data
       } else {
-        throw new Error(response.data.message || '更新诗词失败')
+        throw new Error(response.message || '更新诗词失败')
       }
     } catch (error: any) {
       console.error('更新诗词失败:', error)
-      throw new Error(error.response?.data?.message || error.message || '网络错误')
+      throw new Error(error.message || '网络错误')
     }
   }
 
   // 切换收藏状态
   static async toggleFavorite(id: number): Promise<Poem> {
     try {
-      const response: AxiosResponse<ApiResponse<Poem>> = await api.patch(`/poems/${id}/favorite`)
+      const response = await api.patch(`/poems/${id}/favorite`)
       
-      if (response.data.success) {
-        return response.data.data
+      if (response.success) {
+        return response.data
       } else {
-        throw new Error(response.data.message || '切换收藏状态失败')
+        throw new Error(response.message || '切换收藏状态失败')
       }
     } catch (error: any) {
       console.error('切换收藏状态失败:', error)
-      throw new Error(error.response?.data?.message || error.message || '网络错误')
+      throw new Error(error.message || '网络错误')
     }
   }
 
   // 删除诗词
   static async delete(id: number): Promise<Poem> {
     try {
-      const response: AxiosResponse<ApiResponse<Poem>> = await api.delete(`/poems/${id}`)
+      const response = await api.delete(`/poems/${id}`)
       
-      if (response.data.success) {
-        return response.data.data
+      if (response.success) {
+        return response.data
       } else {
-        throw new Error(response.data.message || '删除诗词失败')
+        throw new Error(response.message || '删除诗词失败')
       }
     } catch (error: any) {
       console.error('删除诗词失败:', error)
-      throw new Error(error.response?.data?.message || error.message || '网络错误')
+      throw new Error(error.message || '网络错误')
     }
   }
 
   // 获取收藏列表
   static async getFavorites(): Promise<Poem[]> {
     try {
-      const response: AxiosResponse<ApiResponse<Poem[]>> = await api.get('/poems/favorites/list')
+      const response = await api.get('/poems/favorites/list')
       
-      if (response.data.success) {
-        return response.data.data
+      if (response.success) {
+        return response.data
       } else {
-        throw new Error(response.data.message || '获取收藏列表失败')
+        throw new Error(response.message || '获取收藏列表失败')
       }
     } catch (error: any) {
       console.error('获取收藏列表失败:', error)
-      throw new Error(error.response?.data?.message || error.message || '网络错误')
+      throw new Error(error.message || '网络错误')
     }
   }
 
@@ -222,24 +189,24 @@ export class PoemAPI {
   // 获取统计信息
   static async getStats(): Promise<PoemStats> {
     try {
-      const response: AxiosResponse<ApiResponse<PoemStats>> = await api.get('/poems/stats/overview')
+      const response = await api.get('/poems/stats/overview')
       
-      if (response.data.success) {
-        return response.data.data
+      if (response.success) {
+        return response.data
       } else {
-        throw new Error(response.data.message || '获取统计信息失败')
+        throw new Error(response.message || '获取统计信息失败')
       }
     } catch (error: any) {
       console.error('获取统计信息失败:', error)
-      throw new Error(error.response?.data?.message || error.message || '网络错误')
+      throw new Error(error.message || '网络错误')
     }
   }
 
-  // 检查服务器连接（直接访问后端 /health，避免 /api 前缀差异）
+  // 检查服务器连接
   static async checkConnection(): Promise<boolean> {
     try {
-      const response = await axios.get('http://localhost:3001/health', { timeout: 5000 })
-      return response.data?.success === true
+      const response = await http.get('/health')
+      return response.success === true
     } catch (error) {
       console.error('服务器连接检查失败:', error)
       return false

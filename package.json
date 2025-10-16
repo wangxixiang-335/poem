@@ -14,12 +14,15 @@
     "start": "concurrently \"npm run server\" \"npm run dev\""
   },
   "dependencies": {
+    "@modelcontextprotocol/server-filesystem": "^2025.8.21",
+    "@supabase/supabase-js": "^2.75.0",
     "axios": "^1.7.2",
+    "bcryptjs": "^3.0.2",
     "body-parser": "^2.2.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "mysql2": "^3.15.2",
+    "jsonwebtoken": "^9.0.2",
     "pinia": "^2.2.6",
     "vue": "^3.4.0",
     "vue-router": "^4.3.0"
@@ -34,5 +37,4 @@
     "vitest": "^1.6.0",
     "vue-tsc": "^1.8.27"
   }
-  
 }

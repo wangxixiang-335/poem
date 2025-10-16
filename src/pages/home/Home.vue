@@ -4,7 +4,21 @@
     <div class="header">
       <button class="icon-btn" @click="goBack" aria-label="返回">←</button>
       <div class="title">诗词鉴赏</div>
-      <button class="icon-btn" @click="toggleSearch" aria-label="搜索">🔍</button>
+      <div class="header-actions">
+        <button class="icon-btn" @click="toggleSearch" aria-label="搜索">🔍</button>
+        <button 
+          v-if="!authStore.isAuthenticated" 
+          class="auth-btn" 
+          @click="showAuthModal = true"
+          title="登录/注册"
+        >
+          登录
+        </button>
+        <div v-else class="user-info">
+          <span class="username">👤 {{ authStore.user?.username }}</span>
+          <button class="logout-btn" @click="authStore.logout" title="退出登录">退出</button>
+        </div>
+      </div>
     </div>
     <div class="search-bar" v-if="showSearch">
       <input
@@ -60,8 +74,9 @@
           @click="selectCategory(index)"
           role="tab"
           :aria-selected="activeCategory === index"
+          :title="category.description"
         >
-          {{ category }}
+          {{ category.icon }} {{ category.name }}
         </button>
       </div>
     </div>
@@ -125,13 +140,23 @@
       <!-- 分类页：展示所有分类并说明 -->
       <template v-else-if="activeFooter === 1">
         <div class="category-panel">
-          <h3>分类一览</h3>
-          <ul>
-            <li v-for="(c, i) in categories" :key="i">
-              <button class="link" @click="selectCategory(i)">{{ c }}（{{ categoryCounts[c] }}）</button>
-            </li>
-          </ul>
-          <p class="hint">点击分类，将在“首页”按分类筛选；右上角可搜索标题/作者/朝代/内容。</p>
+          <h3>诗词分类</h3>
+          <div class="category-grid">
+            <div 
+              v-for="(c, i) in categories" 
+              :key="i" 
+              class="category-card"
+              @click="viewCategoryPoems(i)"
+            >
+              <div class="category-icon">{{ c.icon }}</div>
+              <div class="category-info">
+                <h4>{{ c.name }}</h4>
+                <p class="category-count">{{ categoryCounts[c.name] }} 首</p>
+                <p class="category-desc">{{ c.description }}</p>
+              </div>
+            </div>
+          </div>
+          <p class="hint">点击分类卡片，将直接跳转到对应分类的诗词页面；右上角可搜索标题/作者/朝代/内容。</p>
         </div>
       </template>
 
@@ -166,16 +191,119 @@
         <div v-if="favList.length === 0" class="empty">还没有收藏的诗词</div>
       </template>
 
-      <!-- 我的页：统计信息 -->
+      <!-- 我的页：个人中心 -->
       <template v-else>
         <div class="profile-panel">
-          <h3>我的</h3>
-          <p>诗词总数：{{ totalCount }}</p>
-          <p>收藏数量：{{ favoritesCount }}</p>
-          <h4 style="margin-top:10px">分类统计</h4>
-          <ul>
-            <li v-for="(c, i) in categories" :key="i">{{ c }}：{{ categoryCounts[c] }}</li>
-          </ul>
+          <!-- 用户信息卡片 -->
+          <div class="user-card">
+            <div class="user-avatar">📚</div>
+            <div class="user-info">
+              <h3>{{ authStore.isAuthenticated ? authStore.user?.username : '诗词爱好者' }}</h3>
+              <p class="user-desc">
+                {{ authStore.isAuthenticated ? '欢迎回来！' : '请登录以享受完整功能' }}
+                <span v-if="totalCount > 0">已收录 {{ totalCount }} 首诗词</span>
+              </p>
+              <div v-if="!authStore.isAuthenticated" class="auth-prompt">
+                <button class="login-prompt-btn" @click="showAuthModal = true">
+                  立即登录/注册
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 未登录提示 -->
+          <div v-if="!authStore.isAuthenticated" class="guest-notice">
+            <h4>🔐 登录后享受更多功能</h4>
+            <ul>
+              <li>📊 个人阅读统计</li>
+              <li>💾 云端收藏同步</li>
+              <li>📱 多设备数据同步</li>
+              <li>🎯 个性化推荐</li>
+            </ul>
+          </div>
+
+          <!-- 已登录用户专属内容 -->
+          <template v-else>
+            <!-- 数据统计卡片 -->
+            <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon">📖</div>
+              <div class="stat-info">
+                <div class="stat-number">{{ totalCount }}</div>
+                <div class="stat-label">诗词总数</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">❤️</div>
+              <div class="stat-info">
+                <div class="stat-number">{{ favoritesCount }}</div>
+                <div class="stat-label">收藏数量</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🏷️</div>
+              <div class="stat-info">
+                <div class="stat-number">{{ Object.keys(categoryCounts).length }}</div>
+                <div class="stat-label">分类数量</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">📊</div>
+              <div class="stat-info">
+                <div class="stat-number">{{ Math.round(favoritesCount / totalCount * 100) || 0 }}%</div>
+                <div class="stat-label">收藏比例</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 分类分布图表 -->
+          <div class="chart-section">
+            <h4>📈 分类分布</h4>
+            <div class="chart-container">
+              <div 
+                v-for="(c, i) in categories" 
+                :key="i" 
+                class="chart-bar"
+                :style="{ width: `${(categoryCounts[c.name] / totalCount * 100) || 0}%` }"
+                :title="`${c.name}: ${categoryCounts[c.name]} 首`"
+              >
+                <span class="chart-label">{{ c.icon }} {{ c.name }}</span>
+                <span class="chart-count">{{ categoryCounts[c.name] }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 热门朝代 -->
+          <div class="dynasty-section">
+            <h4>🏛️ 热门朝代</h4>
+            <div class="dynasty-tags">
+              <span 
+                v-for="(dynasty, index) in topDynasties" 
+                :key="index"
+                class="dynasty-tag"
+                :class="{ 'top-dynasty': index < 3 }"
+              >
+                {{ dynasty.dynasty }} ({{ dynasty.count }})
+              </span>
+            </div>
+          </div>
+
+          <!-- 快速操作 -->
+          <div class="quick-actions">
+            <h4>⚡ 快速操作</h4>
+            <div class="action-buttons">
+              <button class="action-btn" @click="exportData">
+                📥 导出数据
+              </button>
+              <button class="action-btn" @click="clearAllFavorites">
+                🗑️ 清空收藏
+              </button>
+              <button class="action-btn" @click="refreshData">
+                🔄 刷新数据
+              </button>
+            </div>
+            </div>
+          </template>
         </div>
       </template>
     </div>
@@ -248,6 +376,13 @@
       @close="showOnlineSearch = false"
       @add-poems="handleAddPoems"
     />
+
+    <!-- 用户认证模态框 -->
+    <AuthModal 
+      :show="showAuthModal" 
+      @close="showAuthModal = false"
+      @success="handleAuthSuccess"
+    />
   </div>
 </template>
 
@@ -256,6 +391,12 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { analyzePoem, type AnalysisResult, type SearchPoemItem } from '../../api/poem'
 import { PoemAPI, type Poem as DatabasePoem } from '../../api/poemDatabase'
 import OnlineSearch from '../../components/OnlineSearch.vue'
+import AuthModal from '../../components/AuthModal.vue'
+import { useAuthStore } from '../../stores/auth'
+
+// 用户认证状态
+const authStore = useAuthStore()
+const showAuthModal = ref(false)
 
 /* 轮播数据 */
 const carouselItems = ref([
@@ -277,7 +418,16 @@ const carouselItems = ref([
 ])
 
 /* 分类与数据 */
-const categories = ref(['唐诗', '宋词', '元曲', '古风', '现代诗', '乐府', '绝句', '律诗'])
+const categories = ref([
+  { name: '唐诗', description: '唐代诗歌，格律严谨，意境深远', icon: '📜' },
+  { name: '宋词', description: '宋代词牌，婉约豪放，音律优美', icon: '🎵' },
+  { name: '元曲', description: '元代散曲，通俗易懂，富有生活气息', icon: '🎭' },
+  { name: '古风', description: '古代风格诗歌，包括汉魏六朝作品', icon: '🏛️' },
+  { name: '现代诗', description: '现当代诗歌，形式自由，情感真挚', icon: '🆕' },
+  { name: '乐府', description: '汉魏乐府诗，民间歌谣，叙事性强', icon: '🎶' },
+  { name: '绝句', description: '四句诗体，言简意赅，意境完整', icon: '✂️' },
+  { name: '律诗', description: '八句诗体，对仗工整，格律严谨', icon: '⚖️' }
+])
 const activeCategory = ref(0)
 
 type Poem = DatabasePoem
@@ -301,12 +451,6 @@ const loadPoemsFromDatabase = async (): Promise<void> => {
     console.log('🔍 检查服务器连接...')
     const connected = await PoemAPI.checkConnection()
     console.log('🔗 服务器连接状态:', connected)
-    isServerConnected.value = connected
-    
-    if (!connected) {
-      console.warn('⚠️ 服务器连接失败，使用本地数据')
-      throw new Error('无法连接到服务器，请确保后端服务已启动')
-    }
     
     // 获取诗词列表
     console.log('📚 从数据库获取诗词列表...')
@@ -314,6 +458,9 @@ const loadPoemsFromDatabase = async (): Promise<void> => {
     console.log('✅ 获取到诗词数据:', poemList.length, '首')
     console.log('📋 诗词列表:', poemList)
     poems.value = poemList
+    
+    // 如果成功获取到数据，说明数据库连接正常
+    isServerConnected.value = true
     
     // 如果数据库为空，插入默认数据
     if (poemList.length === 0) {
@@ -328,6 +475,7 @@ const loadPoemsFromDatabase = async (): Promise<void> => {
     
     // 如果数据库连接失败，使用本地默认数据
     console.log('🔄 使用本地默认数据')
+    isServerConnected.value = false
     poems.value = getDefaultPoems()
   } finally {
     isLoading.value = false
@@ -336,6 +484,7 @@ const loadPoemsFromDatabase = async (): Promise<void> => {
 
 // 获取默认诗词数据
 const getDefaultPoems = (): Poem[] => [
+  // 唐诗
   {
     title: '静夜思',
     author: '李白',
@@ -355,15 +504,6 @@ const getDefaultPoems = (): Poem[] => [
     is_favorite: false
   },
   {
-    title: '水调歌头',
-    author: '苏轼',
-    dynasty: '宋代',
-    content: '明月几时有？把酒问青天。不知天上宫阙，今夕是何年。',
-    preview: '明月几时有？把酒问青天。不知天上宫阙，今夕是何年。',
-    image: 'https://ai-public.mastergo.com/ai/img_res/156f26c1f21f943949d6e24ce6c4e10c.jpg',
-    is_favorite: false
-  },
-  {
     title: '登鹳雀楼',
     author: '王之涣',
     dynasty: '唐代',
@@ -379,6 +519,92 @@ const getDefaultPoems = (): Poem[] => [
     content: '千山鸟飞绝，万径人踪灭。孤舟蓑笠翁，独钓寒江雪。',
     preview: '千山鸟飞绝，万径人踪灭。孤舟蓑笠翁，独钓寒江雪。',
     image: 'https://ai-public.mastergo.com/ai/img_res/f0be731204399b0b196cea3d7505fdd2.jpg',
+    is_favorite: false
+  },
+  
+  // 宋词
+  {
+    title: '水调歌头',
+    author: '苏轼',
+    dynasty: '宋代',
+    content: '明月几时有？把酒问青天。不知天上宫阙，今夕是何年。',
+    preview: '明月几时有？把酒问青天。不知天上宫阙，今夕是何年。',
+    image: 'https://ai-public.mastergo.com/ai/img_res/156f26c1f21f943949d6e24ce6c4e10c.jpg',
+    is_favorite: false
+  },
+  {
+    title: '声声慢',
+    author: '李清照',
+    dynasty: '宋代',
+    content: '寻寻觅觅，冷冷清清，凄凄惨惨戚戚。乍暖还寒时候，最难将息。',
+    preview: '寻寻觅觅，冷冷清清，凄凄惨惨戚戚。乍暖还寒时候，最难将息。',
+    image: 'https://ai-public.mastergo.com/ai/img_res/156f26c1f21f943949d6e24ce6c4e10c.jpg',
+    is_favorite: false
+  },
+  
+  // 元曲
+  {
+    title: '天净沙·秋思',
+    author: '马致远',
+    dynasty: '元代',
+    content: '枯藤老树昏鸦，小桥流水人家，古道西风瘦马。夕阳西下，断肠人在天涯。',
+    preview: '枯藤老树昏鸦，小桥流水人家，古道西风瘦马。夕阳西下，断肠人在天涯。',
+    image: 'https://ai-public.mastergo.com/ai/img_res/156f26c1f21f943949d6e24ce6c4e10c.jpg',
+    is_favorite: false
+  },
+  
+  // 古风（汉代）
+  {
+    title: '上邪',
+    author: '佚名',
+    dynasty: '汉代',
+    content: '上邪！我欲与君相知，长命无绝衰。山无陵，江水为竭，冬雷震震，夏雨雪，天地合，乃敢与君绝！',
+    preview: '上邪！我欲与君相知，长命无绝衰。山无陵，江水为竭，冬雷震震，夏雨雪，天地合，乃敢与君绝！',
+    image: 'https://ai-public.mastergo.com/ai/img_res/48599143c45e1b4cb1d0cd756388f738.jpg',
+    is_favorite: false
+  },
+  
+  // 现代诗
+  {
+    title: '再别康桥',
+    author: '徐志摩',
+    dynasty: '现代',
+    content: '轻轻的我走了，正如我轻轻的来；我轻轻的招手，作别西天的云彩。',
+    preview: '轻轻的我走了，正如我轻轻的来；我轻轻的招手，作别西天的云彩。',
+    image: 'https://ai-public.mastergo.com/ai/img_res/437f5006c8faaf74d6d7d4197e1d9482.jpg',
+    is_favorite: false
+  },
+  
+  // 乐府诗
+  {
+    title: '长歌行',
+    author: '佚名',
+    dynasty: '汉代',
+    content: '青青园中葵，朝露待日晞。阳春布德泽，万物生光辉。常恐秋节至，焜黄华叶衰。百川东到海，何时复西归？少壮不努力，老大徒伤悲！',
+    preview: '青青园中葵，朝露待日晞。阳春布德泽，万物生光辉。常恐秋节至，焜黄华叶衰。百川东到海，何时复西归？少壮不努力，老大徒伤悲！',
+    image: 'https://ai-public.mastergo.com/ai/img_res/43e7125fe4023d89a1774e4416e1ace4.jpg',
+    is_favorite: false
+  },
+  
+  // 绝句（四句诗）
+  {
+    title: '相思',
+    author: '王维',
+    dynasty: '唐代',
+    content: '红豆生南国，春来发几枝。愿君多采撷，此物最相思。',
+    preview: '红豆生南国，春来发几枝。愿君多采撷，此物最相思。',
+    image: 'https://ai-public.mastergo.com/ai/img_res/f0be731204399b0b196cea3d7505fdd2.jpg',
+    is_favorite: false
+  },
+  
+  // 律诗（八句诗）
+  {
+    title: '望岳',
+    author: '杜甫',
+    dynasty: '唐代',
+    content: '岱宗夫如何？齐鲁青未了。造化钟神秀，阴阳割昏晓。荡胸生曾云，决眦入归鸟。会当凌绝顶，一览众山小。',
+    preview: '岱宗夫如何？齐鲁青未了。造化钟神秀，阴阳割昏晓。荡胸生曾云，决眦入归鸟。会当凌绝顶，一览众山小。',
+    image: 'https://ai-public.mastergo.com/ai/img_res/48599143c45e1b4cb1d0cd756388f738.jpg',
     is_favorite: false
   }
 ]
@@ -474,26 +700,58 @@ const showSearch = ref(false)
 const searchQuery = ref('')
 const toggleSearch = () => (showSearch.value = !showSearch.value)
 const clearSearch = () => (searchQuery.value = '')
-const dynastyMap: Record<string, string> = {
-  唐诗: '唐',
-  宋词: '宋',
-  元曲: '元',
-  古风: '',
-  现代诗: '',
-  乐府: '',
-  绝句: '',
-  律诗: ''
+// 分类筛选逻辑
+const getFilteredPoemsByCategory = (category: string, poems: Poem[]): Poem[] => {
+  switch (category) {
+    case '唐诗':
+      return poems.filter(p => p.dynasty.includes('唐'))
+    case '宋词':
+      return poems.filter(p => p.dynasty.includes('宋'))
+    case '元曲':
+      return poems.filter(p => p.dynasty.includes('元'))
+    case '古风':
+      // 古风包括唐代及以前的诗词
+      return poems.filter(p => p.dynasty.includes('唐') || p.dynasty.includes('汉') || p.dynasty.includes('魏晋') || p.dynasty.includes('先秦'))
+    case '现代诗':
+      // 现代诗包括民国及以后的诗词
+      return poems.filter(p => p.dynasty.includes('现代') || p.dynasty.includes('当代') || p.dynasty.includes('民国'))
+    case '乐府':
+      // 乐府诗主要是汉魏六朝时期的诗歌
+      return poems.filter(p => p.dynasty.includes('汉') || p.dynasty.includes('魏晋') || p.dynasty.includes('南北朝'))
+    case '绝句':
+      // 绝句是四句诗，通过内容判断
+      return poems.filter(p => {
+        const lines = (p.content || p.preview).split(/[，。；！？]/).filter(line => line.trim())
+        return lines.length === 4
+      })
+    case '律诗':
+      // 律诗是八句诗，通过内容判断
+      return poems.filter(p => {
+        const lines = (p.content || p.preview).split(/[，。；！？]/).filter(line => line.trim())
+        return lines.length === 8
+      })
+    default:
+      return poems
+  }
 }
+
 const filteredPoems = computed(() => {
   const q = searchQuery.value.trim()
-  const targetDynasty = dynastyMap[categories.value[activeCategory.value]] || ''
-  return poems.value.filter((p) => {
-    const matchDynasty = targetDynasty ? p.dynasty.includes(targetDynasty) : true
-    const matchQuery =
-      !q ||
-      [p.title, p.author, p.dynasty, p.preview || p.content].some((t) => t?.toLowerCase().includes(q.toLowerCase()))
-    return matchDynasty && matchQuery
-  })
+  const currentCategory = categories.value[activeCategory.value]
+  
+  // 先按分类筛选
+  let filtered = getFilteredPoemsByCategory(currentCategory.name, poems.value)
+  
+  // 再按搜索关键词筛选
+  if (q) {
+    filtered = filtered.filter((p) => {
+      return [p.title, p.author, p.dynasty, p.preview || p.content].some((t) => 
+        t?.toLowerCase().includes(q.toLowerCase())
+      )
+    })
+  }
+  
+  return filtered
 })
 
 // 统计信息
@@ -502,11 +760,79 @@ const favoritesCount = computed(() => poems.value.filter((p) => Boolean(p.is_fav
 const categoryCounts = computed<Record<string, number>>(() => {
   const map: Record<string, number> = {}
   categories.value.forEach((c) => {
-    const key = dynastyMap[c]
-    map[c] = key ? poems.value.filter((p) => p.dynasty.includes(key)).length : poems.value.length
+    map[c.name] = getFilteredPoemsByCategory(c.name, poems.value).length
   })
   return map
 })
+
+// 热门朝代统计
+const topDynasties = computed(() => {
+  const dynastyMap: Record<string, number> = {}
+  poems.value.forEach(poem => {
+    dynastyMap[poem.dynasty] = (dynastyMap[poem.dynasty] || 0) + 1
+  })
+  
+  return Object.entries(dynastyMap)
+    .map(([dynasty, count]) => ({ dynasty, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5) // 只显示前5个热门朝代
+})
+
+// 快速操作方法
+const exportData = () => {
+  const data = {
+    poems: poems.value,
+    favorites: favList.value,
+    stats: {
+      totalCount: totalCount.value,
+      favoritesCount: favoritesCount.value,
+      categoryCounts: categoryCounts.value,
+      topDynasties: topDynasties.value
+    },
+    exportTime: new Date().toISOString()
+  }
+  
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `poem-data-${new Date().toISOString().split('T')[0]}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+  
+  alert('数据导出成功！')
+}
+
+const clearAllFavorites = async () => {
+  if (!confirm('确定要清空所有收藏吗？此操作不可撤销。')) {
+    return
+  }
+  
+  try {
+    if (isServerConnected.value) {
+      // 批量取消收藏
+      const favPoems = poems.value.filter(p => p.is_favorite && p.id)
+      for (const poem of favPoems) {
+        await PoemAPI.toggleFavorite(poem.id!)
+      }
+    } else {
+      // 本地模式：直接更新状态
+      poems.value.forEach(poem => {
+        poem.is_favorite = false
+      })
+    }
+    
+    alert('收藏已清空！')
+  } catch (error: any) {
+    console.error('清空收藏失败:', error)
+    alert(`清空收藏失败: ${error.message}`)
+  }
+}
+
+const refreshData = async () => {
+  await loadPoemsFromDatabase()
+  alert('数据刷新完成！')
+}
 
 /* 收藏 */
 const isFav = (p: Poem) => Boolean(p.is_favorite)
@@ -576,9 +902,25 @@ const footerItems = ref([
 const activeFooter = ref(0)
 const switchTab = (index: number) => (activeFooter.value = index)
 
+// 认证成功处理
+const handleAuthSuccess = () => {
+  showAuthModal.value = false
+  // 可以在这里添加登录成功后的逻辑，比如刷新用户数据等
+}
+
 /* 交互方法 */
 const goBack = () => window.history.length > 1 ? window.history.back() : alert('没有上一页')
 const selectCategory = (index: number) => (activeCategory.value = index)
+
+// 查看分类诗词
+const viewCategoryPoems = (index: number) => {
+  // 切换到首页
+  activeFooter.value = 0
+  // 选择对应分类
+  activeCategory.value = index
+  // 滚动到顶部
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
 const selectedPoem = ref<Poem | null>(null)
 const showDetail = ref(false)
 const viewPoemDetail = (poem: Poem) => {
@@ -652,12 +994,71 @@ onBeforeUnmount(() => {
   top: 0;
   z-index: 10;
 }
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .icon-btn {
   background: transparent;
   border: none;
   font-size: 18px;
   cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
 }
+
+.icon-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.auth-btn {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.auth-btn:hover {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  transform: translateY(-1px);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.username {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.logout-btn {
+  background: #f3f4f6;
+  color: #6b7280;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.logout-btn:hover {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .title {
   font-size: 22px;
   font-weight: bold;
@@ -820,30 +1221,46 @@ onBeforeUnmount(() => {
 /* 分类导航 */
 .category-scroll {
   white-space: nowrap;
-  padding: 12px 0;
+  padding: 16px 0;
   background-color: #fff;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
   flex-shrink: 0;
   overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+.category-scroll::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
 }
 .category-container {
   display: inline-block;
-  padding: 0 12px;
+  padding: 0 16px;
 }
 .category-item {
-  display: inline-block;
-  padding: 8px 14px;
-  margin-right: 12px;
-  background-color: #f0f0f0;
-  border-radius: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  margin-right: 8px;
+  background-color: #f8f8f8;
+  border-radius: 20px;
   font-size: 14px;
   color: #666;
   cursor: pointer;
   border: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.category-item:hover {
+  background-color: #e8e8e8;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 .category-item.active {
-  background-color: #c9a76f;
+  background: linear-gradient(135deg, #c9a76f, #b8956a);
   color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(201, 167, 111, 0.3);
 }
 
 /* 内容列表 */
@@ -928,11 +1345,115 @@ onBeforeUnmount(() => {
   padding: 16px;
   box-shadow: 0 4px 15px rgba(0,0,0,0.05);
 }
+
+/* 用户认证相关样式 */
+.auth-prompt {
+  margin-top: 12px;
+}
+
+.login-prompt-btn {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.login-prompt-btn:hover {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  transform: translateY(-1px);
+}
+
+.guest-notice {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.guest-notice h4 {
+  margin: 0 0 12px 0;
+  color: #495057;
+  font-size: 16px;
+}
+
+.guest-notice ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #6c757d;
+}
+
+.guest-notice li {
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+/* 分类网格布局 */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* 分类卡片样式 */
+.category-card {
+  background: linear-gradient(135deg, #f8f4ed, #fff);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 1px solid #e8e4dc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.category-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  border-color: #c9a76f;
+}
+
+.category-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.category-info h4 {
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin: 0 0 8px 0;
+}
+
+.category-count {
+  font-size: 14px;
+  color: #c9a76f;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.category-desc {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
+  margin: 0;
+}
+
 .link {
   background: none;
   border: none;
   color: #c9a76f;
   cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  text-align: left;
+  width: 100%;
+  padding: 8px 0;
 }
 
 /* 底部导航 */
