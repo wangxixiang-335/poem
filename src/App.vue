@@ -1,9 +1,10 @@
 <template>
   <router-view />
+  <AIChatAssistant />
 </template>
 
 <script setup lang="ts">
-// 根组件用于承载路由视图
+import AIChatAssistant from '@/components/AIChatAssistant.vue'
 </script>
 
 <style>

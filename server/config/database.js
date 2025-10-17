@@ -61,6 +61,9 @@ async function initDatabase() {
     // 检查并创建users表
     await createUsersTableIfNotExists();
     
+    // 检查并创建验证码表
+    await createVerificationCodesTableIfNotExists();
+    
   } catch (error) {
     console.error('数据库初始化失败:', error.message);
     // 不抛出错误，让服务器继续运行在离线模式
@@ -90,6 +93,37 @@ async function createUsersTableIfNotExists() {
     }
   } catch (error) {
     console.warn('⚠️ 检查users表失败:', error.message);
+  }
+}
+
+// 创建验证码表（如果不存在）
+async function createVerificationCodesTableIfNotExists() {
+  try {
+    // 检查验证码表是否存在
+    const { error: checkError } = await supabase.from('verification_codes').select('count').limit(1);
+    
+    if (checkError && checkError.code === '42P01') { // 表不存在
+      console.log('📝 验证码表不存在，请在Supabase控制台执行以下SQL:');
+      console.log(`
+        CREATE TABLE IF NOT EXISTS verification_codes (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) NOT NULL,
+          code VARCHAR(6) NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW(),
+          expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '10 minutes')
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_verification_codes_email ON verification_codes(email);
+        CREATE INDEX IF NOT EXISTS idx_verification_codes_expires ON verification_codes(expires_at);
+      `);
+      
+    } else if (checkError) {
+      console.warn('⚠️ 检查验证码表时出错:', checkError.message);
+    } else {
+      console.log('✅ 验证码表已存在');
+    }
+  } catch (error) {
+    console.warn('⚠️ 检查验证码表失败:', error.message);
   }
 }
 

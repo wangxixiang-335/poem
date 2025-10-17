@@ -69,7 +69,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // 注册
-  const register = async (userData: { username: string; email: string; password: string }) => {
+  const register = async (userData: { username: string; email: string; password: string; verificationCode: string }) => {
     try {
       const response = await http.post('/auth/register', userData)
       

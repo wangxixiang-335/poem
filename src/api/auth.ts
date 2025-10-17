@@ -14,6 +14,14 @@ export interface AuthResponse {
     user: User
     token: string
   }
+  testCode?: string
+}
+
+export interface ApiResponse<T = any> {
+  success: boolean
+  message: string
+  data?: T
+  testCode?: string
 }
 
 export interface LoginData {
@@ -25,14 +33,30 @@ export interface RegisterData {
   username: string
   email: string
   password: string
+  verificationCode: string
+}
+
+export interface SendVerificationData {
+  email: string
 }
 
 export const AuthAPI = {
+  // 发送验证码
+  async sendVerificationCode(data: SendVerificationData): Promise<ApiResponse> {
+    try {
+      const response = await http.post('/auth/send-verification', data)
+      return response as ApiResponse
+    } catch (error: any) {
+      console.error('发送验证码失败:', error)
+      throw error
+    }
+  },
+
   // 用户注册
-  async register(data: RegisterData): Promise<AuthResponse> {
+  async register(data: RegisterData): Promise<ApiResponse> {
     try {
       const response = await http.post('/auth/register', data)
-      return response
+      return response as ApiResponse
     } catch (error: any) {
       console.error('注册失败:', error)
       throw error
@@ -40,10 +64,10 @@ export const AuthAPI = {
   },
 
   // 用户登录
-  async login(data: LoginData): Promise<AuthResponse> {
+  async login(data: LoginData): Promise<ApiResponse> {
     try {
       const response = await http.post('/auth/login', data)
-      return response
+      return response as ApiResponse
     } catch (error: any) {
       console.error('登录失败:', error)
       throw error
@@ -51,10 +75,10 @@ export const AuthAPI = {
   },
 
   // 获取当前用户信息
-  async getCurrentUser(): Promise<AuthResponse> {
+  async getCurrentUser(): Promise<ApiResponse> {
     try {
       const response = await http.get('/auth/me')
-      return response
+      return response as ApiResponse
     } catch (error: any) {
       console.error('获取用户信息失败:', error)
       throw error
@@ -62,10 +86,10 @@ export const AuthAPI = {
   },
 
   // 更新用户信息
-  async updateProfile(data: { username?: string; email?: string }): Promise<AuthResponse> {
+  async updateProfile(data: { username?: string; email?: string }): Promise<ApiResponse> {
     try {
       const response = await http.put('/auth/profile', data)
-      return response
+      return response as ApiResponse
     } catch (error: any) {
       console.error('更新用户信息失败:', error)
       throw error

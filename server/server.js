@@ -5,6 +5,7 @@ import bodyParser from 'body-parser';
 import { initDatabase } from './config/database.js';
 import poemRoutes from './routes/poemRoutes.js';
 import authRoutes from './routes/auth.js';
+import verificationRoutes from './routes/verification.js';
 
 // 加载环境变量
 dotenv.config();
@@ -30,6 +31,7 @@ app.use((req, res, next) => {
 // 路由配置
 app.use('/api/poems', poemRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/verification', verificationRoutes);
 
 // 健康检查接口
 app.get('/health', (req, res) => {

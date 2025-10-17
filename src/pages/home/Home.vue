@@ -6,17 +6,9 @@
       <div class="title">诗词鉴赏</div>
       <div class="header-actions">
         <button class="icon-btn" @click="toggleSearch" aria-label="搜索">🔍</button>
-        <button 
-          v-if="!authStore.isAuthenticated" 
-          class="auth-btn" 
-          @click="showAuthModal = true"
-          title="登录/注册"
-        >
-          登录
-        </button>
-        <div v-else class="user-info">
+        <div class="user-info">
           <span class="username">👤 {{ authStore.user?.username }}</span>
-          <button class="logout-btn" @click="authStore.logout" title="退出登录">退出</button>
+          <button class="logout-btn" @click="handleLogout" title="退出登录">退出</button>
         </div>
       </div>
     </div>
@@ -200,30 +192,14 @@
             <div class="user-info">
               <h3>{{ authStore.isAuthenticated ? authStore.user?.username : '诗词爱好者' }}</h3>
               <p class="user-desc">
-                {{ authStore.isAuthenticated ? '欢迎回来！' : '请登录以享受完整功能' }}
+                {{ authStore.isAuthenticated ? '欢迎回来！' : '请先登录以使用完整功能' }}
                 <span v-if="totalCount > 0">已收录 {{ totalCount }} 首诗词</span>
               </p>
-              <div v-if="!authStore.isAuthenticated" class="auth-prompt">
-                <button class="login-prompt-btn" @click="showAuthModal = true">
-                  立即登录/注册
-                </button>
-              </div>
             </div>
           </div>
 
-          <!-- 未登录提示 -->
-          <div v-if="!authStore.isAuthenticated" class="guest-notice">
-            <h4>🔐 登录后享受更多功能</h4>
-            <ul>
-              <li>📊 个人阅读统计</li>
-              <li>💾 云端收藏同步</li>
-              <li>📱 多设备数据同步</li>
-              <li>🎯 个性化推荐</li>
-            </ul>
-          </div>
-
           <!-- 已登录用户专属内容 -->
-          <template v-else>
+          <template v-if="authStore.isAuthenticated">
             <!-- 数据统计卡片 -->
             <div class="stats-grid">
             <div class="stat-card">
@@ -377,26 +353,27 @@
       @add-poems="handleAddPoems"
     />
 
-    <!-- 用户认证模态框 -->
-    <AuthModal 
-      :show="showAuthModal" 
-      @close="showAuthModal = false"
-      @success="handleAuthSuccess"
-    />
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { analyzePoem, type AnalysisResult, type SearchPoemItem } from '../../api/poem'
 import { PoemAPI, type Poem as DatabasePoem } from '../../api/poemDatabase'
 import OnlineSearch from '../../components/OnlineSearch.vue'
-import AuthModal from '../../components/AuthModal.vue'
 import { useAuthStore } from '../../stores/auth'
 
 // 用户认证状态
 const authStore = useAuthStore()
-const showAuthModal = ref(false)
+const router = useRouter()
+
+// 退出登录
+const handleLogout = () => {
+  authStore.logout()
+  router.push('/login')
+}
 
 /* 轮播数据 */
 const carouselItems = ref([
@@ -902,11 +879,7 @@ const footerItems = ref([
 const activeFooter = ref(0)
 const switchTab = (index: number) => (activeFooter.value = index)
 
-// 认证成功处理
-const handleAuthSuccess = () => {
-  showAuthModal.value = false
-  // 可以在这里添加登录成功后的逻辑，比如刷新用户数据等
-}
+
 
 /* 交互方法 */
 const goBack = () => window.history.length > 1 ? window.history.back() : alert('没有上一页')
